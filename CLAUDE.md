@@ -38,6 +38,7 @@ classics, credibility comes from showing the actual retrieved passages.
 ## Stack
 
 - Runtime: Node.js 20+ (Next.js App Router).
+- Frontend: Next.js with a shiny, great-looking UI for showing off capabilities (chat + trust panel with per-book attribution).
 - LLM/embeddings: `@google/genai` (or standard Gemini API). Embeddings `text-embedding-004` @ 768 dims,
   task types `RETRIEVAL_DOCUMENT` (docs) / `RETRIEVAL_QUERY` (queries).
   Generation `gemini-3-flash`, default temperature.
@@ -52,6 +53,7 @@ classics, credibility comes from showing the actual retrieved passages.
 - Strip everything outside the `*** START ... ***` / `*** END ... ***` markers.
 - Title/author from the Gutenberg header or a `corpus/manifest.json` sidecar.
 - Optionally capture chapter/section as `section_title` when detectable.
+- **Rate Limiting**: We are using the Gemini free tier. Ingestion must gracefully handle rate limits (429s). Implement exponential backoff, sleep between batches, or use a concurrency limiter (like `p-limit`) to ensure the ingestion script doesn't fail but retries until successful.
 
 ## Do / Don't
 

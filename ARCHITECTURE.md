@@ -103,7 +103,7 @@ flowchart TB
    dims (Matryoshka representation ensures minimal quality loss).
 6. **Upsert** into the local embedded LanceDB database.
 
-Ingestion is a script (`npm run ingest`), never on the request path.
+Ingestion is a script (`npm run ingest`), never on the request path. Due to using the Gemini Free Tier, ingestion must implement strong rate-limiting logic (e.g., exponential backoff, pauses between batches) to prevent and gracefully handle API rate limit (429) errors.
 
 ### 4.2 Query (request path)
 
