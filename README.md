@@ -193,7 +193,7 @@ recall/
 ├── Dockerfile            ├── requirements.txt
 ├── supabase/schema.sql    # pgvector + FTS + hybrid_search()
 ├── corpus/                # Project Gutenberg .txt files (you provide)
-├── app/                   # FastAPI backend (built with Claude Code)
+├── backend/               # FastAPI backend (built with Claude Code)
 ├── frontend/              # Next.js app (built with Claude Code)
 └── eval/                  # golden set + RAGAS harness
 ```
