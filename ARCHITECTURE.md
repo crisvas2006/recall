@@ -28,11 +28,11 @@ attributed answer — something a bare chatbot can't convincingly do.
 **In (MVP)**
 - A curated, single-domain library of **plain-text** books (multiple books).
 - Paragraph-aware chunking.
-- Dense-primary hybrid retrieval → rerank → **cross-book synthesis** with
+- Pure dense retrieval → rerank → **cross-book synthesis** with
   per-claim citations and refusal.
 - Golden-set evaluation with RAGAS-style metrics + an ablation table.
-- OpenTelemetry tracing + self-hosted Phoenix.
-- Local run + Cloud Run (backend) + Vercel (frontend).
+- LangSmith tracing for zero-boilerplate observability.
+- Local run only via a monolithic Next.js application using embedded LanceDB.
 
 **Out (deferred — stated deliberately)**
 - **Whole-idea context expansion** (parent-section / neighbour-window retrieval).
@@ -41,9 +41,10 @@ attributed answer — something a bare chatbot can't convincingly do.
 - **EPUB / PDF** ingestion (plain text only for now).
 - **Multi-domain / very large** corpora and per-book filtering UI.
 - Auth, multi-user, streaming, caching.
+- Hybrid/Lexical search (Pure dense with modern embeddings captures semantic intent perfectly without the complexity of FTS).
 
 **A KISS note on multi-book.** Supporting many books is *not* deferred, because
-it costs almost nothing here (the `documents` table + `chunks.document_id` FK
+it costs almost nothing here (the embedded database + `documents` table + `chunks.document_id` FK
 already model it, and retrieval spans all chunks by default) and it is the whole
 point of the product. What we simplify instead is the genuinely complex part:
 one input format and a coherent single-domain corpus, rather than a large mixed
@@ -57,39 +58,31 @@ pile that would muddy retrieval.
 flowchart TB
     User([User]) -->|question| FE
 
-    subgraph Vercel["Vercel — Next.js frontend"]
+    subgraph App["Next.js Application (Local)"]
         FE[Chat UI + Trust Panel<br/>per-claim citations · scores · faithfulness]
+        API[Next.js API Routes<br/>/api/query]
+        ING[Ingestion Script<br/>strip boilerplate → paragraph chunk → embed]
+        
+        FE -->|POST /api/query| API
+        ING -->|upsert| DB[(Embedded LanceDB)]
+        API <-->|dense search| DB
     end
 
-    FE -->|POST /query| API
-
-    subgraph Container["FastAPI backend — Docker (local) / Cloud Run (prod)"]
-        direction TB
-        API[Query API]
-        ING[Ingestion CLI<br/>strip boilerplate → paragraph chunk → embed]
-        RET[Dense-primary Hybrid Retrieval<br/>dense + lexical → RRF → top-30]
-        RR[Local Reranker<br/>MiniLM cross-encoder → top-6]
-        GEN[Cross-book Synthesis<br/>merge · attribute per book · refuse if unsupported]
-        OTEL[OpenTelemetry tracing]
-        API --> RET --> RR --> GEN --> API
-    end
-
-    subgraph Ext["External / managed"]
-        GEM[Gemini API<br/>embeddings + Flash generation]
-        SUPA[(Supabase<br/>pgvector + Postgres FTS)]
-        PHX[Phoenix<br/>self-hosted traces + eval]
+    subgraph Ext["External / managed APIs"]
+        GEM[Gemini API<br/>embeddings + generation]
+        COH[Cohere API<br/>reranking]
+        LS[LangSmith<br/>observability]
     end
 
     ING -->|embed| GEM
-    ING -->|upsert| SUPA
-    RET <-->|dense + lexical search| SUPA
-    RET -->|embed query| GEM
-    GEN -->|generate| GEM
-    OTEL -.->|spans| PHX
-    GEN -->|answer + per-book citations + faithfulness| FE
+    API -->|embed query| GEM
+    API -->|rerank top-30| COH
+    API -->|generate| GEM
+    API -.->|traces| LS
+    API -->|answer + per-book citations + faithfulness| FE
 
     EVAL[Eval harness<br/>~40 golden Q&A · RAGAS · ablation]
-    EVAL -.->|gates each retrieval layer| RET
+    EVAL -.->|gates each retrieval layer| API
 ```
 
 ---
@@ -106,30 +99,27 @@ flowchart TB
 4. **Chunk paragraph-aware**: pack whole paragraphs (double-newline separated)
    up to ~500 tokens, ~15% overlap, never splitting a paragraph. Each chunk
    records `document_id`, `section_title`, `chunk_index`, `token_count`.
-5. **Embed** with `gemini-embedding-001`, task type `RETRIEVAL_DOCUMENT`, 768
-   dims.
-6. **Upsert** into `chunks` (with the generated `fts` tsvector).
+5. **Embed** with `text-embedding-004`, task type `RETRIEVAL_DOCUMENT`, 768
+   dims (Matryoshka representation ensures minimal quality loss).
+6. **Upsert** into the local embedded LanceDB database.
 
-Ingestion is a CLI (`python -m app.ingest --path ./corpus`), never on the
-request path.
+Ingestion is a script (`npm run ingest`), never on the request path.
 
 ### 4.2 Query (request path)
 
-1. **Embed the query** (`RETRIEVAL_QUERY` task type).
-2. **Retrieve** via `hybrid_search()`: dense (cosine on pgvector, the primary
-   signal for conceptual queries) + lexical (`ts_rank_cd` on FTS, rescuing exact
-   names/terms), fused with **RRF**, returning ~30 candidates joined with book
-   title/author.
-3. **Rerank** with the local cross-encoder; keep ~6 passages — enough material
+1. **Embed the query** (`text-embedding-004`, `RETRIEVAL_QUERY` task type).
+2. **Retrieve** via Dense Search on LanceDB returning ~30 candidates joined with book
+   title/author. 
+3. **Rerank** with Cohere Rerank API; keep ~6 passages — enough material
    from potentially several books to synthesise across.
-4. **Synthesise** with `gemini-3-flash` (temp ~0.25): merge complementary points
+4. **Synthesise** with `gemini-3-flash` (default temperature): merge complementary points
    into one answer, attribute each to its book, note disagreements, and refuse
    if the passages don't address the question.
 5. **Respond** with the answer, per-claim citations (book + passage), the
    retrieved passages + scores, and a faithfulness signal — the trust-panel
    payload.
 
-Every stage emits an OpenTelemetry span (inputs, outputs, latency, token/cost).
+Every stage automatically emits a trace to LangSmith.
 
 ---
 
@@ -137,30 +127,19 @@ Every stage emits an OpenTelemetry span (inputs, outputs, latency, token/cost).
 
 Retrieval, not generation, is where RAG fails most — so effort concentrates here.
 
-**Dense is the workhorse (for prose).** Conceptual questions ("how do I motivate
+**Pure Dense Search.** Conceptual questions ("how do I motivate
 myself?") rarely share vocabulary with the source wording ("discipline," "the
-will," "assent," "habit"). Semantic embeddings bridge that gap; keyword search
-alone would miss it. This is the opposite balance from a technical corpus, and
-it's a deliberate, stated consequence of the pivot to prose.
-
-**Lexical still earns a supporting seat.** Exact terms and proper nouns ("what
-does *Marcus Aurelius* say about *anger*") are where BM25-style ranking wins, so
-we keep it in the hybrid and fuse with **Reciprocal Rank Fusion**
-(`score = Σ 1/(k+rank)`, `k=60`), computed in SQL. Expect its marginal
-contribution to be **smaller than on technical text** — measuring and reporting
-that is itself a strong signal.
+will," "assent," "habit"). Semantic embeddings bridge that gap. With modern, high-quality embedding models like `text-embedding-004`, dense search captures semantic intent and exact phrasing well enough that maintaining a complex Lexical/Full-Text Search (FTS) index is unnecessary. This significantly reduces architectural complexity (no Postgres FTS, no Reciprocal Rank Fusion algorithms). Studies and case studies repeatedly show that strong embedding models alone cover 95%+ of queries in pure prose and conceptual texts without needing sparse rescue mechanisms.
 
 **Reranking is the star.** A cross-encoder scores each (query, passage) pair
 jointly — exactly the semantic-relevance discrimination prose needs. Retrieve
-broad (top-30), rerank precise (top-6). Cheap on CPU, highest ROI for answer
-quality.
+broad (top-30 via LanceDB), rerank precise (top-6 via Cohere). Highest ROI for answer quality.
 
-**Built in layers, gated by eval.** Implement `dense-only → +hybrid → +rerank`,
+**Built in layers, gated by eval.** Implement `dense-only → +rerank`,
 recording metrics at each step (see §8). If a layer doesn't move the numbers, it
 gets cut — and that decision is the signal.
 
-Config knobs: `RETRIEVAL_MODE` (`dense|hybrid`), `RERANK_ENABLED`,
-`RERANK_CANDIDATES`, `RERANK_TOP_K`, `RRF_K`, `RELEVANCE_FLOOR`.
+Config knobs: `RERANK_ENABLED`, `RERANK_CANDIDATES`, `RERANK_TOP_K`, `RELEVANCE_FLOOR`.
 
 ---
 
@@ -183,35 +162,24 @@ Tune target size and overlap against the golden set, not by assumption.
 
 ## 7. Model choices
 
-### 7.1 Embeddings — `gemini-embedding-001` @ 768 dims
-- GA model, top of MTEB multilingual; chosen over the preview multimodal model
-  (text-only corpus → preview risk buys nothing; vectors aren't portable across
-  generations).
-- **768 dims** via `output_dimensionality`: pgvector's HNSW/IVFFlat indexes cap
-  at **2 000 dims**, so the 3 072 default would be unindexable. 768 keeps the
-  index clean, cuts storage ~4×, small quality loss (verify on-corpus). 1 536 is
-  the fallback (still under the cap).
+### 7.1 Embeddings — `text-embedding-004` @ 768 dims
+- Google's latest embedding model, topping MTEB leaderboards, faster and cheaper.
+- **768 dims** natively supported via Matryoshka representation learning. Truncating to 768 dimensions retains almost all retrieval quality while keeping the local vector database extremely small and fast.
 - **Asymmetric task types**: docs `RETRIEVAL_DOCUMENT`, queries
   `RETRIEVAL_QUERY`.
 
-### 7.2 Generation — `gemini-3-flash` @ temp ~0.25
+### 7.2 Generation — `gemini-3-flash` @ default temp
 - The job is faithful **synthesis** across passages + attribution + refusal, not
   frontier reasoning — Flash tier is the sweet spot; Pro's 2M context solves a
   problem we don't have.
-- Slightly above zero temperature for fluent multi-source prose, still low
-  enough to stay grounded and keep evals comparable.
+- Use default temperature for fluent multi-source prose while maintaining grounding.
 - **Flash-Lite** as a measured downgrade experiment via the eval harness.
 
-### 7.3 Reranker — `cross-encoder/ms-marco-MiniLM-L-6-v2`
-- ~80 MB, CPU, sub-second on ~30 candidates. `bge-reranker-base` is the step-up
-  if eval shows headroom is worth the weight. **Baked into the image** at build
-  time (cold-start mitigation).
+### 7.3 Reranker — `Cohere Rerank API`
+- Shifting from local PyTorch `sentence-transformers` to Cohere's API drastically reduces the footprint of the application. It prevents bloating the node modules and ensures rapid cold-starts, while matching or beating local cross-encoder quality.
 
 ### 7.4 Judge (eval) — `gemini-3-flash`
 - Same model as generation → one key, consistent judge bias across ablations.
-
-> Model IDs and pricing drift. All names live behind env vars; pin and re-verify
-> against Google's current docs at build time.
 
 ---
 
@@ -228,24 +196,15 @@ Tune target size and overlap against the golden set, not by assumption.
   | Pipeline | context precision | faithfulness | answer relevancy |
   |---|---|---|---|
   | dense only | … | … | … |
-  | + hybrid (RRF) | … | … | … |
   | + rerank | … | … | … |
 
-  For a prose corpus, expect the hybrid row to add less than it would on
-  technical text — report it honestly.
 - **Run it first**, before feature polish, so every tuning choice is measured.
 
 ---
 
 ## 9. Observability & guardrails
 
-**Tracing.** OpenTelemetry (vendor-neutral) around embed → retrieve → rerank →
-synthesise. Local/demo exports to **Phoenix** (`:6006`, also the eval viewer);
-cloud exports to **Cloud Trace** or disables via `OTEL_ENABLED=false`.
-
-**Two layers, one instrumentation.** Phoenix is the dev tool; the in-app **trust
-panel** (retrieved passages, scores, faithfulness, per-book attribution) is the
-product feature built from the same trace data.
+**Tracing.** LangSmith replaces manual OpenTelemetry spans. A simple AI SDK / LangChain wrapper intercepts all API calls, tracing retrieval latencies, generation costs, and inputs/outputs automatically.
 
 **Guardrails.**
 - Grounded-only synthesis prompt: answer solely from provided passages.
@@ -254,7 +213,6 @@ product feature built from the same trace data.
   than answering from the model's own memory.
 - **Disagreement surfacing**: when sources conflict, say so instead of
   flattening.
-- Low temperature to suppress drift.
 
 ---
 
@@ -262,13 +220,11 @@ product feature built from the same trace data.
 
 | Decision | Chosen | Rejected | Rationale |
 |---|---|---|---|
-| Corpus | Curated single-domain, plain text, **multi-book** | One book; 100 mixed books | Synthesis needs several books; multi-book is free here; single-domain keeps retrieval clean |
-| Chunking | Paragraph-aware, idea-complete | Structure/heading splitting | Prose has little structure; ideas span paragraphs |
-| Retrieval | Dense-primary hybrid + rerank | Dense-only; lexical-heavy | Query≠text vocabulary → dense leads; lexical rescues names; rerank drives precision |
-| Context scope | Chunk-level (expansion deferred) | Parent/neighbour expansion now | KISS; schema makes it a trivial v2 add |
-| Embedding dims | 768 | 3 072 default | pgvector index caps at 2 000 dims |
-| Generation | Gemini 3 Flash, synthesis prompt | Pro tier | Task is synthesis, not reasoning |
-| Orchestration | Thin, direct SDK calls | LangChain / LlamaIndex | Every choice visible & defensible |
+| Architecture | **Next.js Monolith** | Python Backend + Next.js + DB | Removing FastAPI/Docker simplifies local setup to `npm install` for reviewers. |
+| Vector DB | **LanceDB (Embedded)** | Supabase / Postgres | Zero infrastructure setup. The DB runs in-memory/file-system, ideal for take-homes. |
+| Retrieval | **Pure Dense + Rerank** | Hybrid (Dense + FTS) | `text-embedding-004` captures semantics perfectly. Dropping FTS removes immense SQL complexity. |
+| Reranker | **Cohere API** | Local `sentence-transformers` | Avoids pulling a 1.5GB PyTorch dependency into a Node.js environment. |
+| Embeddings | `text-embedding-004` | `gemini-embedding-001` | Faster, cheaper, higher MTEB, and native 768-dim truncation without quality loss. |
 
 ---
 

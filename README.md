@@ -190,7 +190,7 @@ over-engineered complex one — is the design thesis, not an oversight.
 recall/
 ├── README.md              ├── ARCHITECTURE.md      ├── DEPLOYMENT.md
 ├── CLAUDE.md              ├── .env.example         ├── docker-compose.yml
-├── Dockerfile            ├── requirements.txt
+├── Dockerfile             ├── requirements.txt
 ├── supabase/schema.sql    # pgvector + FTS + hybrid_search()
 ├── corpus/                # Project Gutenberg .txt files (you provide)
 ├── backend/               # FastAPI backend (built with Claude Code)
