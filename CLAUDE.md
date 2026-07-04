@@ -62,6 +62,7 @@ classics, credibility comes from showing the actual retrieved passages.
 - ✅ Return `{ answer, citations[] (book, author, passage, score),
   retrieved_passages[], faithfulness }`.
 - ✅ Keep the request path free of batch work (ingestion is an npm script).
+- ✅ Define robust fallback defaults in `src/lib/config.ts` using Zod (e.g., `CHUNK_TARGET_TOKENS=500`, `RERANK_TOP_K=6`) for all tuning parameters. The app should run smoothly even if the `.env` file contains only API keys.
 - ❌ No Python, No Docker, No Postgres/Supabase. Everything runs in the Node context.
 - ❌ No auth, multi-user, streaming, caching, EPUB/PDF, context expansion, or
   multi-domain corpora in the MVP.
