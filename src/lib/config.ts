@@ -38,7 +38,7 @@ const envSchema = z.object({
 
   // -- Retrieval & Reranking --
   // `coerce.boolean()` translates "true" / "false" strings to boolean types.
-  RERANK_ENABLED: z.coerce.boolean().default(true),
+  RERANK_ENABLED: z.coerce.boolean().default(false),
   RERANK_CANDIDATES: z.coerce.number().default(30),
   RERANK_TOP_K: z.coerce.number().default(6),
   

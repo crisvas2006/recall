@@ -76,7 +76,8 @@ async function judgeResponseWithRetry(query: string, expectedConcepts: string[],
         }
       });
       
-      const text = response.text || "{}";
+      let text = response.text || "{}";
+      text = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       return JSON.parse(text);
     } catch (e: any) {
       if (e?.status === 429 || e?.status === 503 || e?.message?.includes("429") || e?.message?.includes("503")) {
@@ -106,7 +107,28 @@ async function main() {
     // In Phase 2, this is executing our MOCK pipeline. 
     // In Phase 3, this will execute the real LanceDB + Gemini synthesis pipeline.
     const passages = await retrievePassages(row.query);
-    const synthesis = await synthesizeAnswer(row.query, passages);
+    let synthesis;
+    let attempt = 0;
+    while (attempt < 5) {
+      try {
+        await sleep(4000); // Strict free tier pacing
+        synthesis = await synthesizeAnswer(row.query, passages);
+        break;
+      } catch (e: any) {
+        if (e?.status === 429 || e?.status === 503 || e?.message?.includes("429") || e?.message?.includes("503")) {
+          attempt++;
+          const backoffTime = Math.pow(2, attempt) * 1000;
+          console.warn(`⚠️ Synthesis rate limited (429/503). Retrying in ${backoffTime / 1000}s...`);
+          await sleep(backoffTime);
+        } else {
+          throw e;
+        }
+      }
+    }
+    
+    if (!synthesis) {
+      throw new Error("Failed to synthesize answer after 5 attempts due to rate limits.");
+    }
 
     console.log(`\nEvaluating [${row.type}] Q: "${row.query}"`);
     

@@ -107,8 +107,8 @@ commit modern in-copyright books to a public repo.
 | **Multi-book**        | **Supported** — one curated, single-domain library                                          | Cross-book synthesis is the product; storage/retrieval across books is supported in the schema                      |
 | **Database**          | **LanceDB (Embedded)**                                                                      | Zero infrastructure setup. Keeps the project strictly local for easy evaluation.                                    |
 | **Embeddings**        | `gemini-embedding-2` @ **768 dims**, task types `RETRIEVAL_DOCUMENT` / `RETRIEVAL_QUERY`    | Google's newest embedding model; native 768-dim truncation keeps vector DB tiny with ~zero quality loss             |
-| **Retrieval**         | **Pure Dense Search** → **rerank** top-30 → top-6                                           | Strong modern embeddings capture semantics flawlessly; skipping FTS/Hybrid search significantly cuts SQL complexity   |
-| **Reranker**          | **Cohere Rerank API**                                                                       | Highest-ROI step for semantic relevance; using an API keeps the app lightweight vs a 1.5GB local PyTorch dependency |
+| **Retrieval**         | **Pure Dense Search (MVP)**                                                                 | Strong modern embeddings capture semantics flawlessly; skipping FTS significantly cuts SQL complexity               |
+| **Reranker**          | **None (MVP)**                                                                              | Pure dense is sufficient for MVP corpus size. Cohere API remains in scope for future large-corpus overlapping     |
 | **Generation**        | `gemini-3-flash` @ default temp, **cross-book synthesis** prompt                            | Merge complementary passages, attribute each to its book, flag disagreements, refuse if unsupported                 |
 | **Orchestration**     | Thin / no heavy framework — Vercel AI SDK + direct API calls                                | Every decision stays visible & defensible                                                                           |
 | **Guardrails**        | Grounded-only + per-claim citation + refusal below a relevance floor                        | Credibility rests on proving the answer came from the corpus, not the model                                         |
@@ -117,6 +117,8 @@ commit modern in-copyright books to a public repo.
 
 Retrieval is built **in layers, each gated by the eval harness** — every added
 component is a measured decision.
+
+For a deep dive into how we prevent prompt injection and guarantee grounded responses, see [`SAFETY_AND_PRECISION.md`](./SAFETY_AND_PRECISION.md).
 
 ---
 
@@ -179,6 +181,7 @@ over-engineered complex one — is the design thesis, not an oversight.
 ```
 recall/
 ├── README.md              ├── ARCHITECTURE.md      ├── DEPLOYMENT.md
+├── SAFETY_AND_PRECISION.md
 ├── CLAUDE.md              ├── .env.example         ├── .gitignore
 ├── corpus/                # Project Gutenberg .txt files (you provide)
 ├── src/                   # Next.js app (built with Claude Code)

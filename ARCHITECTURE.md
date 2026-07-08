@@ -131,9 +131,8 @@ Retrieval, not generation, is where RAG fails most — so effort concentrates he
 myself?") rarely share vocabulary with the source wording ("discipline," "the
 will," "assent," "habit"). Semantic embeddings bridge that gap. With modern, high-quality embedding models like `gemini-embedding-2`, dense search captures semantic intent and exact phrasing well enough that maintaining a complex Lexical/Full-Text Search (FTS) index is unnecessary. This significantly reduces architectural complexity (no Postgres FTS, no Reciprocal Rank Fusion algorithms). Studies and case studies repeatedly show that strong embedding models alone cover 95%+ of queries in pure prose and conceptual texts without needing sparse rescue mechanisms.
 
-**Reranking is the star.** A cross-encoder scores each (query, passage) pair
-jointly — exactly the semantic-relevance discrimination prose needs. Retrieve
-broad (top-30 via LanceDB), rerank precise (top-6 via Cohere). Highest ROI for answer quality.
+**Reranking for Future Scaling.** A cross-encoder scores each (query, passage) pair
+jointly — exactly the semantic-relevance discrimination prose needs. While **Pure Dense Retrieval** (Top-6 directly from LanceDB via `gemini-embedding-2`) is sufficient and highly performant for this MVP, a dedicated Reranker (like Cohere) remains in scope for future expansion. When the corpus grows significantly and passages begin to heavily overlap, a "retrieve broad (top-30), rerank precise (top-6)" pipeline yields the highest ROI for answer quality. The `COHERE_API_KEY` is retained in `.env` for this exact future use case.
 
 **Built in layers, gated by eval.** Implement `dense-only → +rerank`,
 recording metrics at each step (see §8). If a layer doesn't move the numbers, it
@@ -206,7 +205,7 @@ Tune target size and overlap against the golden set, not by assumption.
 
 **Tracing.** LangSmith replaces manual OpenTelemetry spans. A simple AI SDK / LangChain wrapper intercepts all API calls, tracing retrieval latencies, generation costs, and inputs/outputs automatically.
 
-**Guardrails.**
+**Guardrails.** (See [`SAFETY_AND_PRECISION.md`](./SAFETY_AND_PRECISION.md) for full details on anti-injection and anti-hallucination mechanisms)
 - Grounded-only synthesis prompt: answer solely from provided passages.
 - **Per-claim citation** tied to `(book, chunk)`.
 - **Refusal** below a relevance floor — "your library doesn't cover this" rather
@@ -222,8 +221,8 @@ Tune target size and overlap against the golden set, not by assumption.
 |---|---|---|---|
 | Architecture | **Next.js Monolith** | Python Backend + Next.js + DB | Removing FastAPI/Docker simplifies local setup to `npm install` for reviewers. |
 | Vector DB | **LanceDB (Embedded)** | Supabase / Postgres | Zero infrastructure setup. The DB runs in-memory/file-system, ideal for take-homes. |
-| Retrieval | **Pure Dense + Rerank** | Hybrid (Dense + FTS) | `gemini-embedding-2` captures semantics perfectly. Dropping FTS removes immense SQL complexity. |
-| Reranker | **Cohere API** | Local `sentence-transformers` | Avoids pulling a 1.5GB PyTorch dependency into a Node.js environment. |
+| Retrieval | **Pure Dense (MVP)** | Hybrid (Dense + FTS) | `gemini-embedding-2` captures semantics perfectly. Dropping FTS removes immense SQL complexity. |
+| Reranker | **None (MVP)** | Local `sentence-transformers` / Cohere API | Deferred to v2. Pure dense handles the MVP well. Cohere remains in scope for future large-corpus scaling. |
 | Embeddings | `gemini-embedding-2` | `gemini-embedding-001` | Faster, cheaper, higher MTEB, and native 768-dim truncation without quality loss. |
 
 ---
