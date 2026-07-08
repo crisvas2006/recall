@@ -31,6 +31,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [activeCitations, setActiveCitations] = useState<RetrievedPassage[]>([]);
+  const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -63,6 +64,7 @@ export default function Home() {
       
       setMessages((prev) => [...prev, assistantMsg]);
       setActiveCitations(data.citations);
+      setActiveMessageId(assistantMsg.id);
     } catch (error) {
       setMessages((prev) => [
         ...prev,
@@ -122,10 +124,19 @@ export default function Home() {
             
             {messages.map((msg) => (
               <div key={msg.id} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                <div className={`max-w-[85%] rounded-2xl px-6 py-5 ${
+                <div 
+                  onClick={() => {
+                    if (msg.role === "assistant" && msg.citations) {
+                      setActiveCitations(msg.citations);
+                      setActiveMessageId(msg.id);
+                    }
+                  }}
+                  className={`max-w-[85%] rounded-2xl px-6 py-5 ${
                   msg.role === "user" 
                     ? "bg-[#2c2b29] text-[#f9f7f3] font-sans" 
-                    : "bg-white border border-[#e8e4db] shadow-sm"
+                    : msg.id === activeMessageId
+                      ? "bg-white border-2 border-[#2c2b29] shadow-md cursor-pointer"
+                      : "bg-white border border-[#e8e4db] shadow-sm hover:border-[#d4d0c5] cursor-pointer transition-colors"
                 }`}>
                   {msg.role === "assistant" ? (
                     <div className="prose prose-stone font-serif prose-lg max-w-none">
@@ -139,6 +150,7 @@ export default function Home() {
                   <button 
                     onClick={() => {
                       setActiveCitations(msg.citations!);
+                      setActiveMessageId(msg.id);
                       setIsDrawerOpen(true);
                     }}
                     className="md:hidden mt-3 text-sm text-[#5c5a56] flex items-center gap-1 hover:text-black font-sans font-medium bg-white px-3 py-1.5 rounded-full shadow-sm border border-[#e8e4db]"

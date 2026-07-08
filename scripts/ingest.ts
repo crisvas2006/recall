@@ -37,8 +37,8 @@ async function generateEmbeddingWithRetry(text: string, maxRetries = 15): Promis
     } catch (error: any) {
       if (error?.status === 429 || error?.message?.includes("429")) {
         attempt++;
-        // Exponential backoff: 2s, 4s, 8s, 16s, 32s
-        const backoffTime = Math.pow(2, attempt) * 1000;
+        // Exponential backoff: 1s, 2s, 4s, 8s, 16s...
+        const backoffTime = Math.pow(2, attempt) * 500;
         console.warn(`⚠️ Rate limited (429). Retrying in ${backoffTime / 1000} seconds... (Attempt ${attempt}/${maxRetries})`);
         await sleep(backoffTime);
       } else {
@@ -99,8 +99,8 @@ async function main() {
       const chunk = chunks[i];
       const promise = limit(async () => {
         try {
-          // Hard delay to respect Gemini Free Tier limits (15 RPM = 4 seconds per request)
-          await sleep(4000);
+          // Dynamic backoff handles rate limiting, so we only need a small stagger
+          await sleep(200);
           const vector = await generateEmbeddingWithRetry(chunk.text);
           records.push({
             id: `${file}-chunk-${i}`,
@@ -110,6 +110,10 @@ async function main() {
             text: chunk.text,
             vector: vector,
           });
+          
+          if (records.length % 25 === 0 || records.length === embeddingPromises.length) {
+            console.log(`   -> Embedded ${records.length} chunks...`);
+          }
         } catch (e) {
           console.error(`❌ Fatal error embedding chunk ${i} in ${file}:`, e);
           process.exit(1); // Fail fast
@@ -119,7 +123,7 @@ async function main() {
     }
   }
 
-  console.log(`\n⏳ Generating embeddings for ${embeddingPromises.length} total chunks. This will take a moment depending on rate limits...`);
+  console.log(`\n⏳ Generating embeddings for ${embeddingPromises.length} total chunks...`);
   await Promise.all(embeddingPromises);
 
   // 4. Upsert into LanceDB

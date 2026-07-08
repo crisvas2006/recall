@@ -62,8 +62,8 @@ async function judgeResponseWithRetry(query: string, expectedConcepts: string[],
   let attempt = 0;
   while (attempt < 5) {
     try {
-      // Free tier pace
-      await sleep(4000); 
+      // Small stagger, rely on dynamic backoff for rate limits
+      await sleep(200); 
       
       const response = await ai.models.generateContent({
         model: "gemini-3.5-flash",
@@ -82,8 +82,8 @@ async function judgeResponseWithRetry(query: string, expectedConcepts: string[],
     } catch (e: any) {
       if (e?.status === 429 || e?.status === 503 || e?.message?.includes("429") || e?.message?.includes("503")) {
         attempt++;
-        const backoffTime = Math.pow(2, attempt) * 1000;
-        console.warn(`⚠️ Judge rate limited (429). Retrying in ${backoffTime / 1000}s...`);
+        const backoffTime = Math.pow(2, attempt) * 500;
+        console.warn(`⚠️ Judge rate limited (429/503). Retrying in ${backoffTime / 1000}s...`);
         await sleep(backoffTime);
       } else {
         throw e;
@@ -111,13 +111,13 @@ async function main() {
     let attempt = 0;
     while (attempt < 5) {
       try {
-        await sleep(4000); // Strict free tier pacing
+        await sleep(200); // Small stagger, rely on dynamic backoff
         synthesis = await synthesizeAnswer(row.query, passages);
         break;
       } catch (e: any) {
         if (e?.status === 429 || e?.status === 503 || e?.message?.includes("429") || e?.message?.includes("503")) {
           attempt++;
-          const backoffTime = Math.pow(2, attempt) * 1000;
+          const backoffTime = Math.pow(2, attempt) * 500;
           console.warn(`⚠️ Synthesis rate limited (429/503). Retrying in ${backoffTime / 1000}s...`);
           await sleep(backoffTime);
         } else {
