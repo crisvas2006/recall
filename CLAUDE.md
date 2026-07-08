@@ -32,14 +32,14 @@ classics, credibility comes from showing the actual retrieved passages.
    floor. Never let the model answer from parametric memory.
 5. **Paragraph-aware chunking.** Pack whole paragraphs up to ~`CHUNK_TARGET_TOKENS`
    with overlap; never split a paragraph. Preserve `chunk_index` order.
-6. **Pure dense is primary; rerank decides.** We do not use FTS/Hybrid search. Modern embeddings (`text-embedding-004`) capture semantics perfectly.
+6. **Pure dense is primary; rerank decides.** We do not use FTS/Hybrid search. Modern embeddings (`gemini-embedding-2`) capture semantics perfectly.
 7. **Instrument with LangSmith.**
 
 ## Stack
 
 - Runtime: Node.js 20+ (Next.js App Router).
 - Frontend: Next.js with a shiny, great-looking UI for showing off capabilities (chat + trust panel with per-book attribution).
-- LLM/embeddings: `@google/genai` (or standard Gemini API). Embeddings `text-embedding-004` @ 768 dims,
+- LLM/embeddings: `@google/genai` (or standard Gemini API). Embeddings `gemini-embedding-2` @ 768 dims,
   task types `RETRIEVAL_DOCUMENT` (docs) / `RETRIEVAL_QUERY` (queries).
   Generation `gemini-3-flash`, default temperature.
 - Reranker: `cohere-ai` SDK (`rerank-english-v3.0` or latest).
@@ -66,7 +66,7 @@ classics, credibility comes from showing the actual retrieved passages.
 - ❌ No Python, No Docker, No Postgres/Supabase. Everything runs in the Node context.
 - ❌ No auth, multi-user, streaming, caching, EPUB/PDF, context expansion, or
   multi-domain corpora in the MVP.
-- ❌ Don't exceed 768 embedding dims — use Matryoshka truncation natively supported by text-embedding-004.
+- ❌ Don't exceed 768 embedding dims — use Matryoshka truncation natively supported by gemini-embedding-2.
 - ❌ Don't commit in-copyright books; corpus is public-domain only.
 
 ## Suggested layout

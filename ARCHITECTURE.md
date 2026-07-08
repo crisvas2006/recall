@@ -99,7 +99,7 @@ flowchart TB
 4. **Chunk paragraph-aware**: pack whole paragraphs (double-newline separated)
    up to ~500 tokens, ~15% overlap, never splitting a paragraph. Each chunk
    records `document_id`, `section_title`, `chunk_index`, `token_count`.
-5. **Embed** with `text-embedding-004`, task type `RETRIEVAL_DOCUMENT`, 768
+5. **Embed** with `gemini-embedding-2`, task type `RETRIEVAL_DOCUMENT`, 768
    dims (Matryoshka representation ensures minimal quality loss).
 6. **Upsert** into the local embedded LanceDB database.
 
@@ -107,7 +107,7 @@ Ingestion is a script (`npm run ingest`), never on the request path. Due to usin
 
 ### 4.2 Query (request path)
 
-1. **Embed the query** (`text-embedding-004`, `RETRIEVAL_QUERY` task type).
+1. **Embed the query** (`gemini-embedding-2`, `RETRIEVAL_QUERY` task type).
 2. **Retrieve** via Dense Search on LanceDB returning ~30 candidates joined with book
    title/author. 
 3. **Rerank** with Cohere Rerank API; keep ~6 passages — enough material
@@ -129,7 +129,7 @@ Retrieval, not generation, is where RAG fails most — so effort concentrates he
 
 **Pure Dense Search.** Conceptual questions ("how do I motivate
 myself?") rarely share vocabulary with the source wording ("discipline," "the
-will," "assent," "habit"). Semantic embeddings bridge that gap. With modern, high-quality embedding models like `text-embedding-004`, dense search captures semantic intent and exact phrasing well enough that maintaining a complex Lexical/Full-Text Search (FTS) index is unnecessary. This significantly reduces architectural complexity (no Postgres FTS, no Reciprocal Rank Fusion algorithms). Studies and case studies repeatedly show that strong embedding models alone cover 95%+ of queries in pure prose and conceptual texts without needing sparse rescue mechanisms.
+will," "assent," "habit"). Semantic embeddings bridge that gap. With modern, high-quality embedding models like `gemini-embedding-2`, dense search captures semantic intent and exact phrasing well enough that maintaining a complex Lexical/Full-Text Search (FTS) index is unnecessary. This significantly reduces architectural complexity (no Postgres FTS, no Reciprocal Rank Fusion algorithms). Studies and case studies repeatedly show that strong embedding models alone cover 95%+ of queries in pure prose and conceptual texts without needing sparse rescue mechanisms.
 
 **Reranking is the star.** A cross-encoder scores each (query, passage) pair
 jointly — exactly the semantic-relevance discrimination prose needs. Retrieve
@@ -162,7 +162,7 @@ Tune target size and overlap against the golden set, not by assumption.
 
 ## 7. Model choices
 
-### 7.1 Embeddings — `text-embedding-004` @ 768 dims
+### 7.1 Embeddings — `gemini-embedding-2` @ 768 dims
 - Google's latest embedding model, topping MTEB leaderboards, faster and cheaper.
 - **768 dims** natively supported via Matryoshka representation learning. Truncating to 768 dimensions retains almost all retrieval quality while keeping the local vector database extremely small and fast.
 - **Asymmetric task types**: docs `RETRIEVAL_DOCUMENT`, queries
@@ -222,9 +222,9 @@ Tune target size and overlap against the golden set, not by assumption.
 |---|---|---|---|
 | Architecture | **Next.js Monolith** | Python Backend + Next.js + DB | Removing FastAPI/Docker simplifies local setup to `npm install` for reviewers. |
 | Vector DB | **LanceDB (Embedded)** | Supabase / Postgres | Zero infrastructure setup. The DB runs in-memory/file-system, ideal for take-homes. |
-| Retrieval | **Pure Dense + Rerank** | Hybrid (Dense + FTS) | `text-embedding-004` captures semantics perfectly. Dropping FTS removes immense SQL complexity. |
+| Retrieval | **Pure Dense + Rerank** | Hybrid (Dense + FTS) | `gemini-embedding-2` captures semantics perfectly. Dropping FTS removes immense SQL complexity. |
 | Reranker | **Cohere API** | Local `sentence-transformers` | Avoids pulling a 1.5GB PyTorch dependency into a Node.js environment. |
-| Embeddings | `text-embedding-004` | `gemini-embedding-001` | Faster, cheaper, higher MTEB, and native 768-dim truncation without quality loss. |
+| Embeddings | `gemini-embedding-2` | `gemini-embedding-001` | Faster, cheaper, higher MTEB, and native 768-dim truncation without quality loss. |
 
 ---
 
