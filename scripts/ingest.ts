@@ -35,11 +35,11 @@ async function generateEmbeddingWithRetry(text: string, maxRetries = 15): Promis
     try {
       return await generateEmbedding(text);
     } catch (error: any) {
-      if (error?.status === 429 || error?.message?.includes("429")) {
+      if (error?.status === 429 || error?.status === 503 || error?.message?.includes("429") || error?.message?.includes("503")) {
         attempt++;
         // Exponential backoff: 1s, 2s, 4s, 8s, 16s...
         const backoffTime = Math.pow(2, attempt) * 500;
-        console.warn(`⚠️ Rate limited (429). Retrying in ${backoffTime / 1000} seconds... (Attempt ${attempt}/${maxRetries})`);
+        console.warn(`⚠️ Rate limited (429/503). Retrying in ${backoffTime / 1000} seconds... (Attempt ${attempt}/${maxRetries})`);
         await sleep(backoffTime);
       } else {
         // If it's a different error (e.g., Network failure, Bad Request), throw it immediately
