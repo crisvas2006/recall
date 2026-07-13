@@ -39,7 +39,8 @@ async function generateEmbeddingWithRetry(text: string, maxRetries = 15): Promis
         attempt++;
         // Exponential backoff: 1s, 2s, 4s, 8s, 16s...
         const backoffTime = Math.pow(2, attempt) * 500;
-        console.warn(`⚠️ Rate limited (429/503). Retrying in ${backoffTime / 1000} seconds... (Attempt ${attempt}/${maxRetries})`);
+        const statusCode = error?.status || (error?.message?.match(/(429|503)/)?.[0] ?? "Unknown");
+        console.warn(`⚠️ Gemini API error (${statusCode}): ${error?.message || 'No error message provided'}. Retrying in ${backoffTime / 1000} seconds... (Attempt ${attempt}/${maxRetries})`);
         await sleep(backoffTime);
       } else {
         // If it's a different error (e.g., Network failure, Bad Request), throw it immediately

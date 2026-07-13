@@ -48,6 +48,11 @@ const envSchema = z.object({
 
   // -- Database --
   LANCEDB_URI: z.string().default("./lancedb"),
+
+  // -- Observability (LangSmith) --
+  LANGCHAIN_TRACING_V2: z.coerce.boolean().default(false),
+  LANGCHAIN_API_KEY: z.string().optional(),
+  LANGCHAIN_PROJECT: z.string().default("recall"),
 });
 
 // We run `safeParse` to catch validation errors gracefully.
