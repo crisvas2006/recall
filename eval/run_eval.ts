@@ -72,7 +72,16 @@ async function judgeResponseWithRetry(query: string, expectedConcepts: string[],
           { role: "user", parts: [{ text: `QUERY: ${query}\nEXPECTED CONCEPTS: ${expectedConcepts.join(", ")}\nANSWER: ${answer}\nCITATIONS: ${JSON.stringify(citations)}` }] }
         ],
         config: {
-          responseMimeType: "application/json"
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              faithfulness: { type: "INTEGER", description: "Faithfulness score from 1 to 5" },
+              relevancy: { type: "INTEGER", description: "Relevancy score from 1 to 5" },
+              explanation: { type: "STRING", description: "Brief explanation for the scores" }
+            },
+            required: ["faithfulness", "relevancy", "explanation"]
+          }
         }
       });
       
